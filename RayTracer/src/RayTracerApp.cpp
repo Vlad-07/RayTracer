@@ -29,7 +29,6 @@ public:
 		ImGui::Text("Last render time: %.3fms", m_LastRenderTime);
 		ImGui::NewLine();
 		ImGui::ColorPicker3("Sphere color", (float*)&renderer.m_SphereCol);
-		
 		ImGui::End();
 
 
@@ -58,7 +57,7 @@ public:
 		Timer timer;
 
 		renderer.OnResize(m_imgWidth, m_imgHeight);
-		renderer.Render();
+		renderer.RenderMT(2);
 
 		m_LastRenderTime = timer.ElapsedMillis();
 	}	
