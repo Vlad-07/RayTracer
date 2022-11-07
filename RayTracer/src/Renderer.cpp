@@ -20,7 +20,7 @@ namespace Utils
 }
 
 // took this approach because std::thread uses a func pointer wich isn't an option for non-static member functions
-void PerPixelMT(uint32_t startX, uint32_t startY, uint32_t endX, uint32_t endY);
+void RenderRegionMT(const Scene& scene, const Camera& camera, uint32_t startX, uint32_t startY, uint32_t endX, uint32_t endY);
 
 
 Renderer* Renderer::s_Instance = nullptr;
@@ -35,35 +35,35 @@ Renderer::Renderer() : tPool(nullptr), threadStep(0)
 Renderer::~Renderer()
 {
 	s_Instance = nullptr;
-	delete[] tPool;
 }
 
-void Renderer::Render()
+void Renderer::Render(const Scene& scene, const Camera& camera)
 {
+	Ray ray;
+	ray.Origin = camera.GetPosition();
+
 	for (int y = 0; y < m_FinalImage->GetHeight(); y++)
 	{
 		for (int x = 0; x < m_FinalImage->GetWidth(); x++)
 		{
-			glm::vec2 coord = { (float)x / (float)m_FinalImage->GetWidth(), (float)y / (float)m_FinalImage->GetHeight() };
-			coord = coord * 2.0f - 1.0f;
-			glm::vec4 result = PerPixel(coord);
+			ray.Direction = camera.GetRayDirections()[x + y * m_FinalImage->GetWidth()];
 
+			glm::vec4 result = TraceRay(scene, ray);
 			result = glm::clamp(result, glm::vec4(0.0f), glm::vec4(1.0f));
-
 			m_ImageData[y * m_FinalImage->GetWidth() + x] = Utils::ConvertToRGBA(result);
 		}
 	}
 	m_FinalImage->SetData(m_ImageData);
 }
 
-void Renderer::RenderMT(int threads)
+void Renderer::RenderMT(const Scene& scene, const Camera& camera, int threads)
 {
 	threadStep = m_FinalImage->GetHeight() / threads;
 
 	tPool = new std::thread[threads];
 
 	for (uint8_t i = 1; i <= threads; i++)
-		tPool[i - 1] = std::thread(&PerPixelMT, 0, m_FinalImage->GetWidth(), threadStep * (i - 1), threadStep * i);
+		tPool[i - 1] = std::thread(&RenderRegionMT, scene, camera, 0, m_FinalImage->GetWidth(), threadStep * (i - 1), threadStep * i);
 
 	for (uint8_t i = 0; i < threads; i++)
 		tPool[i].join();
@@ -97,48 +97,62 @@ void Renderer::OnResize(int width, int height)
 }
 
 
-glm::vec4 Renderer::PerPixel(glm::vec2 coord)
+glm::vec4 Renderer::TraceRay(const Scene& scene, const Ray& ray)
 {
-	glm::vec3 rayOrigin(0.0f, 0.0f, 2.0f);
-	glm::vec3 rayDir = { coord.x, coord.y, -1.0f };
-	float radius = 1.0f;
-	glm::vec3 sphereColor = m_SphereCol;
-
-	float a = glm::dot(rayDir, rayDir);
-	float b = 2 * glm::dot(rayOrigin, rayDir);
-	float c = glm::dot(rayOrigin, rayOrigin) - radius * radius;
-
-	float discriminator = b * b - 4.0f * a * c;
-
-	if (discriminator < 0.0f)
+	if (!scene.Spheres.size())
 		return glm::vec4(0, 0, 0, 1);
 
-//	float t0 = (-b + glm::sqrt(discriminator)) / (2.0f * a);
-	float closestT = (-b - glm::sqrt(discriminator)) / (2.0f * a);
+	const Sphere* closestSphere = nullptr;
+	float hitDistance = FLT_MAX;
 
-	glm::vec3 hit = rayOrigin + rayDir * closestT;
+	for (const Sphere& sphere : scene.Spheres)
+	{
+		glm::vec3 origin = ray.Origin - sphere.Position;
+
+		float a = glm::dot(ray.Direction, ray.Direction);
+		float b = 2 * glm::dot(origin, ray.Direction);
+		float c = glm::dot(origin, origin) - sphere.Radius * sphere.Radius;
+
+		float discriminant = b * b - 4.0f * a * c;
+
+		if (discriminant < 0.0f)
+			continue;
+
+//		float t0 = (-b + glm::sqrt(discriminant)) / (2.0f * a);
+		float closestT = (-b - glm::sqrt(discriminant)) / (2.0f * a);
+
+		if (closestT < hitDistance)
+			closestSphere = &sphere, hitDistance = closestT;
+	}
+
+	if (!closestSphere)
+		return glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+	glm::vec3 origin = ray.Origin - closestSphere->Position;
+	glm::vec3 hit = origin + ray.Direction * hitDistance;
 	glm::vec3 normal = glm::normalize(hit);
 
 
 	glm::vec3 lightDir = glm::normalize(m_LightDir);
+	float lightIntensity = glm::max(glm::dot(normal, -lightDir), 0.0f); // = cos(ang)
 
-	float d = glm::max(glm::dot(normal, -lightDir), 0.0f); // = cos(ang)
-
-	return glm::vec4(sphereColor * d, 1.0f);
+	return glm::vec4(closestSphere->Albedo * lightIntensity, 1.0f);
 }
 
 
 
-void PerPixelMT(uint32_t startX, uint32_t endX, uint32_t startY, uint32_t endY)
+void RenderRegionMT(const Scene& scene, const Camera& camera, uint32_t startX, uint32_t endX, uint32_t startY, uint32_t endY)
 {
+	Ray ray;
+	ray.Origin = camera.GetPosition();
+
 	for (int y = startY; y < endY; y++)
 	{
 		for (int x = startX; x < endX; x++)
 		{
-			glm::vec2 coord = { (float)x / (float)Renderer::s_Instance->GetFinalImage()->GetWidth(), (float)y / (float)Renderer::s_Instance->GetFinalImage()->GetHeight()};
-			coord = coord * 2.0f - 1.0f;
-			glm::vec4 result = Renderer::s_Instance->PerPixel(coord);
+			ray.Direction = camera.GetRayDirections()[x + y * Renderer::s_Instance->GetFinalImage()->GetWidth()];
 
+			glm::vec4 result = Renderer::s_Instance->TraceRay(scene, ray);
 			result = glm::clamp(result, glm::vec4(0.0f), glm::vec4(1.0f));
 
 			Renderer::s_Instance->GetFinalImageData()[y * Renderer::s_Instance->GetFinalImage()->GetWidth() + x] = Utils::ConvertToRGBA(result);
