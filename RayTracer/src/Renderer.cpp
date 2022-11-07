@@ -56,7 +56,7 @@ void Renderer::Render()
 	m_FinalImage->SetData(m_ImageData);
 }
 
-void Renderer::RenderMT(int&& threads)
+void Renderer::RenderMT(int threads)
 {
 	threadStep = m_FinalImage->GetHeight() / threads;
 
@@ -113,7 +113,7 @@ glm::vec4 Renderer::PerPixel(glm::vec2 coord)
 	if (discriminator < 0.0f)
 		return glm::vec4(0, 0, 0, 1);
 
-	float t0 = (-b + glm::sqrt(discriminator)) / (2.0f * a);
+//	float t0 = (-b + glm::sqrt(discriminator)) / (2.0f * a);
 	float closestT = (-b - glm::sqrt(discriminator)) / (2.0f * a);
 
 	glm::vec3 hit = rayOrigin + rayDir * closestT;

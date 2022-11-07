@@ -13,7 +13,7 @@ public:
 	~Renderer();
 
 	void Render();
-	void RenderMT(int&& threads); // currently slower than the single-thread func because the renderer is faster than the thread management required
+	void RenderMT(int threads); // currently slower than the single-thread func because the renderer is faster than the thread management required
 
 	void Clear();
 	void OnResize(int width, int height);
