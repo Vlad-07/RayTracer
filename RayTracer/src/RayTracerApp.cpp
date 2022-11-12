@@ -40,7 +40,7 @@ public:
 		else if (ImGui::Button("Stop"))
 				m_Rendering = !m_Rendering;
 		ImGui::Checkbox("Multithreaded", &m_Multithreaded);
-		ImGui::SliderInt("No. threads", &m_NoThreads, 2, 16);
+		ImGui::SliderInt("No. threads", &m_NrThreads, 2, 16);
 		ImGui::Text("Last render time: %.3fms", m_LastRenderTime);
 		ImGui::End();
 
@@ -91,7 +91,7 @@ public:
 		if (!m_Multithreaded)
 			m_Renderer.Render(m_Scene, m_Camera);
 		else
-			m_Renderer.RenderMT(m_Scene, m_Camera, m_NoThreads);
+			m_Renderer.RenderMT(m_Scene, m_Camera, m_NrThreads);
 
 		m_LastRenderTime = timer.ElapsedMillis();
 	}	
@@ -104,7 +104,7 @@ private:
 
 	bool m_Rendering = true;
 	bool m_Multithreaded = false;
-	int m_NoThreads = 4;
+	int m_NrThreads = 4;
 	float m_LastRenderTime = 0.0f;
 };
 
